@@ -581,7 +581,7 @@ See the [upgrade guide][1] to upgrade Sensu to version 5.13.1.
 
 **September 9, 2019** &mdash; The latest release of Sensu Go, version 5.13.0, is now available for download.
 This is one of the most user-friendly releases yet!
-Sensuctl now integrates with Bonsai, the Sensu Go asset index, making it easier than ever to fetch and use countless Sensu monitoring plugins and integrations.
+Sensuctl now integrates with Bonsai, the Sensu asset hub, making it easier than ever to fetch and use countless Sensu monitoring plugins and integrations.
 Additionally, sensuctl now supports loading resource configuration files (e.g. checks) from directories and URLs.
 But that's not all!
 Sensuctl now provides a subcommand for exporting its configuration and API tokens to your shell environment.
@@ -591,7 +591,7 @@ See the [upgrade guide][1] to upgrade Sensu to version 5.13.0.
 
 **NEW FEATURES:**
 
-- Sensuctl now integrates with Bonsai, the Sensu Go asset index.
+- Sensuctl now integrates with Bonsai, the Sensu asset hub.
 Run a single sensuctl command to add an asset to your Sensu cluster (e.g. `sensuctl asset add sensu/sensu-pagerduty-handler:1.1.0`).
 Check to see which assets are outdated (new releases available) with the `outdated` subcommand (e.g. `sensuctl asset outdated`).
 - Sensuctl now supports the `env` subcommand for exporting sensuctl configuration and API tokens to your shell environment (e.g. `eval $(sensuctl env)`).
