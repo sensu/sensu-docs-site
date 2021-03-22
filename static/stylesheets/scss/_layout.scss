@@ -7,8 +7,9 @@ main {
   padding-top: $header-height-sm;
 
   #home & {
-    display: flex;
+    display: block;
     max-width: 100%;
+    text-align: center;
   }
 
   @media (min-width: $breakpoint-lg) {
@@ -70,7 +71,7 @@ main {
         transform: rotate(45deg);
         width: 0.6rem;
       }
-      
+
       ul {
         margin: 0.75em 0 0.75em 2.5rem;
       }

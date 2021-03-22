@@ -1,0 +1,30 @@
+.nav-multicolored {
+  color: white;
+  font-size: 1.6rem;
+  display: inline-flex;
+  margin: 3rem auto;
+
+  a {
+    color: white;
+    display: block;
+    padding: 1rem 1.5rem;
+    text-decoration: none;
+    transition: opacity 0.2s ease-in-out;
+  }
+
+  > :hover {
+    opacity: 0.85;
+  }
+
+  :first-child {
+    background-color: #2c3458;
+  }
+
+  :nth-child(2) {
+    background-color: #65b34e;
+  }
+
+  :last-child {
+    background-color: #7a4595;
+  }
+}
