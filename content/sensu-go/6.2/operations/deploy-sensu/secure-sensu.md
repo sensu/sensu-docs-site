@@ -235,6 +235,344 @@ However, deployments can also use the same certificates and keys for etcd peer a
 
 The Sensu backend checks certificate revocation list (CRL) and Online Certificate Status Protocol (OCSP) endpoints for agent mTLS, etcd client, and etcd peer connections whose remote sides present X.509 certificates that provide CRL and OCSP revocation information.
 
+## Dynamic runtime asset paths and sudo
+
+When check commands on Linux require enhanced permissions to run, you can use sudo to escalate the Sensu user’s privileges in a targeted fashion.
+If you use dynamic runtime assets for check commands that use sudo, you'll need to adjust your default sudo configuration.
+
+{{% notice warning %}}
+**WARNING**: Before you adjust your sudo configuration, consider whether using dynamic runtime assets for privileged checks meets your security requirements.<br><br>
+Using dynamic runtime assets with sudo has important security implications.
+Rather than making a habit of using sudo for all check commands, carefully evaluate when its appropriate to escalate privileges in this way.
+{{% /notice %}}
+
+<a name="sudo-all-assets"></a>
+
+To give Sensu access to use `sudo -E` for **all** assets installed under `var/cache/sensu/sensu-agent/`, add these lines to a file in your `/etc/sudoers.d/` directory:
+
+{{< code shell >}}
+sensu   ALL=(ALL)       NOPASSWD:SETENV: /var/cache/sensu/sensu-agent/**/bin/*
+sensu   ALL=(ALL)       NOPASSWD:SETENV: /var/cache/sensu/sensu-agent/**/bin/*.*
+{{< /code >}}
+
+Both lines are necessary because `bin/*.*` won't match Go assets that do not end with file extension `.ext`.
+The `**` is a [POSIX glob][8] that will match any subdirectory other than `.` and `..`.
+`NOPASSWD:SETENV:` allows the Sensu user to run commands without a password and use `sudo -E` to preserve the Sensu user’s environment.
+
+{{% notice warning %}}
+**WARNING**: Use this example with the `**` POSIX glob as a pattern for testing in non-production environments.
+If you include these lines in your sudo configuration, Sensu will run any script installed as an asset under sudo.
+With the `sudo -E` prefix added to the check command, sudo will use the environment variables meant for the Sensu check environment.
+**This opens all installed Sensu assets for privileged operation**.<br><br>
+We recommend replacing the `**` glob with the sha512 sum for the specific build of the dynamic runtime asset to [target a specific dynamic runtime asset directory](#target-a-specific-dynamic-runtime-asset-directory).
+In production, you should also replace the `bin/*.*` and `bin/*` globs in the sudo rule patterns with specific commands to further improve security.
+{{% /notice %}}
+
+With these changes, you can add `sudo -E` as the prefix for all asset-provided commands.
+This will ensure that agent-provided environment variables are passed to the sudo environment and provide the expected sensu-agent operation using default agent configuration settings.
+
+### Example check with privileged check command
+
+This example check uses the `sudo -E` prefix to run a privileged check command provided by a dynamic runtime asset, [System Profile Linux][11].
+The dynamic runtime asset named `sensu/system-profile-linux` is mapped into the environment variable `SENSU_SYSTEM_PROFILE_LINUX_PATH`.
+Sensu will use the asset-specific path environment variable to prefix the check command instead of editing the sudo `secure_path`.
+
+This check requires sudo rules that [allow Sensu to use `sudo -E` to run commands for all assets][14] installed under `var/cache/sensu/sensu-agent/`.
+These rules allow Sensu to run **all** installed asset commands.
+
+{{< language-toggle >}}
+
+{{< code yml >}}
+---
+type: CheckConfig
+api_version: core/v2
+metadata:
+  name: sudo_example
+spec:
+  check_hooks: null 
+  command: sudo -E ${SENSU_SYSTEM_PROFILE_LINUX_PATH}/bin/system-profile-linux
+  interval: 60
+  publish: false
+  runtime_assets:
+  - sensu/system-profile-linux
+  subscriptions:
+  - test
+{{< /code >}}
+
+{{< code json >}}
+{
+  "type": "CheckConfig",
+  "api_version": "core/v2",
+  "metadata": {
+    "name": "sudo_example"
+  },
+  "spec": {
+    "check_hooks": null,
+    "command": "sudo -E ${SENSU_SYSTEM_PROFILE_LINUX_PATH}/bin/system-profile-linux",
+    "interval": 60,
+    "publish": false,
+    "runtime_assets": [
+      "sensu/system-profile-linux"
+    ],
+    "subscriptions": [
+      "test"
+    ]
+  }
+}
+{{< /code >}}
+
+{{< /language-toggle >}}
+
+<a name="asset-definition"></a>
+
+The check requires the following definition for the [`system-profile-linux`][11] dynamic runtime asset:
+
+{{< language-toggle >}}
+
+{{< code yml >}}
+---
+type: Asset
+api_version: core/v2
+metadata:
+  annotations:
+    io.sensu.bonsai.api_url: https://bonsai.sensu.io/api/v1/assets/sensu/system-profile-linux
+    io.sensu.bonsai.name: system-profile-linux
+    io.sensu.bonsai.namespace: sensu
+    io.sensu.bonsai.tags: ""
+    io.sensu.bonsai.tier: Community
+    io.sensu.bonsai.url: https://bonsai.sensu.io/assets/sensu/system-profile-linux
+    io.sensu.bonsai.version: 0.10.1
+  name: sensu/system-profile-linux
+spec:
+  builds:
+  - filters:
+    - entity.system.os == 'darwin'
+    - entity.system.arch == '386'
+    headers: null
+    sha512: 523f4e3ac815969ffe8c085bfc61090655bc2978216396989d4b23de360b65ff696d746bc7acce42f888795a2fadd5f17ee47e98d9c18a1f0d7d9fd8771e228d
+    url: https://assets.bonsai.sensu.io/7d72df2682c0134068abd21a65778c81e61d7afe/system-profile-linux_0.10.1_darwin_386.tar.gz
+  - filters:
+    - entity.system.os == 'darwin'
+    - entity.system.arch == 'amd64'
+    headers: null
+    sha512: 00cbfbc9f39fb3a11915e848277586e21b1223ffdd85a5c1abf02bb31c0bb6cf1e37fa533a6b331ad684d6a815672b8823a215770584c1da10263bdedd924b1d
+    url: https://assets.bonsai.sensu.io/7d72df2682c0134068abd21a65778c81e61d7afe/system-profile-linux_0.10.1_darwin_amd64.tar.gz
+  - filters:
+    - entity.system.os == 'linux'
+    - entity.system.arch == 'armv7'
+    headers: null
+    sha512: f7ad60cfc4ba12ccfe623e2d86727a544b35c2fb165f6c9acae432f132762022ba542cf26d92e15ac445cc5d241feb6055c17286cb2f5a1e5c6be0723a003e91
+    url: https://assets.bonsai.sensu.io/7d72df2682c0134068abd21a65778c81e61d7afe/system-profile-linux_0.10.1_linux_armv7.tar.gz
+  - filters:
+    - entity.system.os == 'linux'
+    - entity.system.arch == 'arm64'
+    headers: null
+    sha512: 689def9af9116cdeaf8bca319b59012a83073bc05587e3e974aa5b9a5cd3a40fbab7ce386737d1d18c62d9d06b7393d3cdc26e35c8c697920cc1a9a9acb94ad9
+    url: https://assets.bonsai.sensu.io/7d72df2682c0134068abd21a65778c81e61d7afe/system-profile-linux_0.10.1_linux_arm64.tar.gz
+  - filters:
+    - entity.system.os == 'linux'
+    - entity.system.arch == '386'
+    headers: null
+    sha512: 7c5bf18b52f6c6b9d55f1fe882c4341949730d25abf31fc472d6779948d31bc3606887ceb7d160d706acd5abd660111e98ba0220815a87d1a5c351dd95b2eaf3
+    url: https://assets.bonsai.sensu.io/7d72df2682c0134068abd21a65778c81e61d7afe/system-profile-linux_0.10.1_linux_386.tar.gz
+  - filters:
+    - entity.system.os == 'linux'
+    - entity.system.arch == 'amd64'
+    headers: null
+    sha512: 29a6e1725f37e533cd9f6a8a17b40ef757ba5ea5dc27701c19a7fb9ac9c2bdf9f684d758d4440f278bb7fc669e52bf02efb3fc6758731f7f3e10617a2fe026cf
+    url: https://assets.bonsai.sensu.io/7d72df2682c0134068abd21a65778c81e61d7afe/system-profile-linux_0.10.1_linux_amd64.tar.gz
+  filters: null
+  headers: null
+{{< /code >}}
+
+{{< code json >}}
+{
+  "type": "Asset",
+  "api_version": "core/v2",
+  "metadata": {
+    "annotations": {
+      "io.sensu.bonsai.api_url": "https://bonsai.sensu.io/api/v1/assets/sensu/system-profile-linux",
+      "io.sensu.bonsai.name": "system-profile-linux",
+      "io.sensu.bonsai.namespace": "sensu",
+      "io.sensu.bonsai.tags": "",
+      "io.sensu.bonsai.tier": "Community",
+      "io.sensu.bonsai.url": "https://bonsai.sensu.io/assets/sensu/system-profile-linux",
+      "io.sensu.bonsai.version": "0.10.1"
+    },
+    "name": "sensu/system-profile-linux"
+  },
+  "spec": {
+    "builds": [
+      {
+        "filters": [
+          "entity.system.os == 'darwin'",
+          "entity.system.arch == '386'"
+        ],
+        "headers": null,
+        "sha512": "523f4e3ac815969ffe8c085bfc61090655bc2978216396989d4b23de360b65ff696d746bc7acce42f888795a2fadd5f17ee47e98d9c18a1f0d7d9fd8771e228d",
+        "url": "https://assets.bonsai.sensu.io/7d72df2682c0134068abd21a65778c81e61d7afe/system-profile-linux_0.10.1_darwin_386.tar.gz"
+      },
+      {
+        "filters": [
+          "entity.system.os == 'darwin'",
+          "entity.system.arch == 'amd64'"
+        ],
+        "headers": null,
+        "sha512": "00cbfbc9f39fb3a11915e848277586e21b1223ffdd85a5c1abf02bb31c0bb6cf1e37fa533a6b331ad684d6a815672b8823a215770584c1da10263bdedd924b1d",
+        "url": "https://assets.bonsai.sensu.io/7d72df2682c0134068abd21a65778c81e61d7afe/system-profile-linux_0.10.1_darwin_amd64.tar.gz"
+      },
+      {
+        "filters": [
+          "entity.system.os == 'linux'",
+          "entity.system.arch == 'armv7'"
+        ],
+        "headers": null,
+        "sha512": "f7ad60cfc4ba12ccfe623e2d86727a544b35c2fb165f6c9acae432f132762022ba542cf26d92e15ac445cc5d241feb6055c17286cb2f5a1e5c6be0723a003e91",
+        "url": "https://assets.bonsai.sensu.io/7d72df2682c0134068abd21a65778c81e61d7afe/system-profile-linux_0.10.1_linux_armv7.tar.gz"
+      },
+      {
+        "filters": [
+          "entity.system.os == 'linux'",
+          "entity.system.arch == 'arm64'"
+        ],
+        "headers": null,
+        "sha512": "689def9af9116cdeaf8bca319b59012a83073bc05587e3e974aa5b9a5cd3a40fbab7ce386737d1d18c62d9d06b7393d3cdc26e35c8c697920cc1a9a9acb94ad9",
+        "url": "https://assets.bonsai.sensu.io/7d72df2682c0134068abd21a65778c81e61d7afe/system-profile-linux_0.10.1_linux_arm64.tar.gz"
+      },
+      {
+        "filters": [
+          "entity.system.os == 'linux'",
+          "entity.system.arch == '386'"
+        ],
+        "headers": null,
+        "sha512": "7c5bf18b52f6c6b9d55f1fe882c4341949730d25abf31fc472d6779948d31bc3606887ceb7d160d706acd5abd660111e98ba0220815a87d1a5c351dd95b2eaf3",
+        "url": "https://assets.bonsai.sensu.io/7d72df2682c0134068abd21a65778c81e61d7afe/system-profile-linux_0.10.1_linux_386.tar.gz"
+      },
+      {
+        "filters": [
+          "entity.system.os == 'linux'",
+          "entity.system.arch == 'amd64'"
+        ],
+        "headers": null,
+        "sha512": "29a6e1725f37e533cd9f6a8a17b40ef757ba5ea5dc27701c19a7fb9ac9c2bdf9f684d758d4440f278bb7fc669e52bf02efb3fc6758731f7f3e10617a2fe026cf",
+        "url": "https://assets.bonsai.sensu.io/7d72df2682c0134068abd21a65778c81e61d7afe/system-profile-linux_0.10.1_linux_amd64.tar.gz"
+      }
+    ],
+    "filters": null,
+    "headers": null
+  }
+}
+{{< /code >}}
+
+{{< /language-toggle >}}
+
+### Target a specific dynamic runtime asset directory
+
+To improve security, configure Sensu access to use `sudo -E` only for specific assets installed under `var/cache/sensu/sensu-agent/`, 
+In your `/etc/sudoers.d/` file, in place of `**`, list the sha512 sum for the specific build of the dynamic runtime asset you are using.
+This effectively whitelists the asset paths you want sudo to be able to use.
+You can find the sha512 sum for the build you want to whitelist in the asset definition.
+
+For example, the following rules would allow `sudo -E` access for only the [Linux amd64 build of the System Profile Linux][13] dynamic runtime asset:
+
+{{< code shell >}}
+sensu   ALL=(ALL)       NOPASSWD:SETENV: /var/cache/sensu/sensu-agent/29a6e1725f37e533cd9f6a8a17b40ef757ba5ea5dc27701c19a7fb9ac9c2bdf9f684d758d4440f278bb7fc669e52bf02efb3fc6758731f7f3e10617a2fe026cf/bin/*.*
+sensu   ALL=(ALL)       NOPASSWD:SETENV: /var/cache/sensu/sensu-agent/29a6e1725f37e533cd9f6a8a17b40ef757ba5ea5dc27701c19a7fb9ac9c2bdf9f684d758d4440f278bb7fc669e52bf02efb3fc6758731f7f3e10617a2fe026cf/bin/*
+{{< /code >}}
+
+### Extend the sudo secure_path to include assets
+
+If the sudo `secure_path` option is enabled, you can extend the path to include sensu-agent assets so that you do not have to explicitly use the full path to the asset binary in your sudo calls.
+For example, this update allows you to call `sudo echo "hello world"` rather than `sudo /usr/bin/echo "hello world"`.
+This is useful for checks that need to run on different hosts or that have different builds for different hosts.
+
+Add this line to your `/etc/sudoers.d/` file:
+
+{{< code shell >}}
+Defaults    secure_path = /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/var/cache/sensu/sensu-agent/**/bin
+{{< /code >}}
+
+### Use sudo for diagnostic checks
+
+To give Sensu access to use `sudo -E` for diagnostic purposes, add this line to your `/etc/sudoers.d/` file:
+
+{{< code shell >}}
+sensu   ALL=(ALL)       NOPASSWD:SETENV: /usr/bin/echo
+{{< /code >}}
+
+This allows you to create diagnostic check commands to ensure that dynamic runtime asset paths work as you expect.
+
+For example, the event output for the following check should list both dynamic runtime asset paths prepended with an obvious asset directory under the configured sensu-agent cache directory:
+
+{{< language-toggle >}}
+
+{{< code yml >}}
+---
+type: CheckConfig
+api_version: core/v2
+metadata:
+  name: sudo_test
+spec:
+  check_hooks: null
+  command: sudo -E echo "PATH:$PATH \nLD:$LD_LIBRARY_PATH \n"
+  env_vars: null
+  handlers: []
+  high_flap_threshold: 0
+  interval: 10
+  low_flap_threshold: 0
+  output_metric_format: ""
+  output_metric_handlers: null
+  proxy_entity_name: ""
+  publish: true
+  round_robin: false
+  runtime_assets:
+  - sensu/system-profile-linux
+  secrets: null
+  stdin: false
+  subdue: null
+  subscriptions:
+  - test
+  timeout: 0
+  ttl: 0
+{{< /code >}}
+
+{{< code json >}}
+{
+  "type": "CheckConfig",
+  "api_version": "core/v2",
+  "metadata": {
+    "name": "sudo_test"
+  },
+  "spec": {
+    "check_hooks": null,
+    "command": "sudo -E echo \"PATH:$PATH \\nLD:$LD_LIBRARY_PATH \\n\"",
+    "env_vars": null,
+    "handlers": [],
+    "high_flap_threshold": 0,
+    "interval": 10,
+    "low_flap_threshold": 0,
+    "output_metric_format": "",
+    "output_metric_handlers": null,
+    "proxy_entity_name": "",
+    "publish": true,
+    "round_robin": false,
+    "runtime_assets": [
+      "sensu/system-profile-linux"
+    ],
+    "secrets": null,
+    "stdin": false,
+    "subdue": null,
+    "subscriptions": [
+      "test"
+    ],
+    "timeout": 0,
+    "ttl": 0
+  }
+}
+{{< /code >}}
+
+{{< /language-toggle >}}
+
 ## Next step: Run a Sensu cluster
 
 Well done!
@@ -248,6 +586,10 @@ The last step before you deploy Sensu is to [set up a Sensu cluster][10].
 [5]: ../../../commercial/
 [6]: https://etcd.io/docs/v3.3.13/op-guide/security/
 [7]: ../../../observability-pipeline/observe-schedule/agent/#security-configuration-flags
+[8]: https://en.wikipedia.org/wiki/Glob_%28programming%29
 [9]: https://github.com/cloudflare/cfssl
 [10]: ../cluster-sensu/
+[11]: https://bonsai.sensu.io/assets/sensu/system-profile-linux
 [12]: ../generate-certificates/
+[13]: #asset-definition
+[14]: #sudo-all-assets
