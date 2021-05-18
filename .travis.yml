@@ -23,3 +23,4 @@ matrix:
         
       script: 
         - python json-validator.py --directory ../content --extension .md
+        - python yaml-validator.py --directory ../content --extension .md
