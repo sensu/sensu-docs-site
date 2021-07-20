@@ -325,7 +325,53 @@ To use Sensu with an external etcd cluster, you must have etcd 3.3.2 or newer.
 To stand up an external etcd cluster, follow etcd's [clustering guide][2] using the same store configuration.
 Do not configure external etcd in Sensu via backend command line flags or the backend configuration file (`/etc/sensu/backend.yml`).
 
-In this example, you will enable client-to-server and peer communication authentication [using self-signed TLS certificates][13].
+### Configure key space access
+
+Follow these steps to configure read and write access to the `/sensu.io/` key space for your users so you can initialize a backend that uses etcd authentication.
+
+1. Add the `sensu` user:
+{{< highlight shell >}}
+etcdctl user add sensu
+{{< /highlight >}}
+
+2. Enter the `sensu` user password when prompted.
+
+3. Create the `sensu_readwrite` role:
+{{< highlight shell >}}
+etcdctl role add sensu_readwrite
+{{< /highlight >}}
+
+4. Grant read/write permissions to the `sensu_readwrite` role under the `/sensu.io/` key space:
+{{< highlight shell >}}
+etcdctl role grant-permission sensu_readwrite readwrite --from-key '/sensu.io/'
+{{< /highlight >}}
+
+5. Grant the `sensu_readwrite` role to the `sensu` user:
+{{< highlight shell >}}
+etcdctl user grant-role sensu sensu_readwrite
+{{< /highlight >}}
+
+6. Confirm that the grant is configured correctly:
+{{< highlight shell >}}
+/opt/etcd/etcdctl user get USERNAME --detail
+{{< /highlight >}}
+    
+    You should see the following output:
+{{< highlight shell >}}
+User: USERNAME
+
+Role sensu_readwrite
+KV Read:
+  [/sensu.io/, <open ended>
+KV Write:
+  [/sensu.io/, <open ended>
+{{< /highlight >}}
+
+Etcd does not enable authentication by default, so additional configuration may be needed before etcd will enforce these controls.
+See the [etcd operators documentation][12] for details.
+
+### Start etcd
+
 To start etcd for `backend-1` based on the [three-node configuration example][19]:
 
 {{< code shell >}}
@@ -350,11 +396,10 @@ etcd \
 {{< /code >}}
 
 {{% notice note %}}
-**NOTE**: The `auto-compaction-mode` and `auto-compaction-retention` flags are important.
-Without these settings, your database may quickly reach etcd's maximum database size limit.
+**NOTE**: Without the `auto-compaction-mode` and `auto-compaction-retention` flags, your database may quickly reach etcd's maximum database size limit.
 {{% /notice %}}
 
-To tell Sensu to use this external etcd data source, add the `sensu-backend` flag `--no-embed-etcd` to the original configuration, along with the path to a client certificate created using your CA:
+Tell Sensu to use this external etcd data source by adding the `sensu-backend` flag `--no-embed-etcd` to the original configuration and the path to a client certificate created using your CA:
 
 {{< code shell >}}
 sensu-backend start \
